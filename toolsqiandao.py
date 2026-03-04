@@ -23,6 +23,9 @@ ANSWER     = getenv("T00LS_ANSWER", "")
 DD_ACCESS_TOKEN = getenv("DD_ACCESS_TOKEN", "")
 DD_SECRET       = getenv("DD_SECRET", "")  # 开启加签才填；未开启可留空
 
+# 企业微信群消息推送
+WECOM_WEBHOOK_KEY = getenv("WECOM_WEBHOOK_KEY", "")
+
 # 其它可选
 BASE_URL = getenv("T00LS_BASE_URL", "https://www.t00ls.com").rstrip("/")
 TIMEOUT  = int(getenv("T00LS_TIMEOUT", "15"))
