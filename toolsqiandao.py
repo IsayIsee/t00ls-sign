@@ -67,6 +67,31 @@ def send_dingtalk(title: str, content: str):
     except Exception as e:
         print(f"钉钉通知异常：{e}")
 
+
+# ===== 企业微信群消息推送 =====
+def send_wecom_webhook(title: str, content: str):
+    if not WECOM_WEBHOOK_KEY:
+        print("未配置 WECOM_WEBHOOK_KEY，跳过企业微信群消息推送。")
+        return
+    try:
+        webhook = f"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key={WECOM_WEBHOOK_KEY}"
+
+        headers = {"Content-Type": "application/json;charset=utf-8"}
+        payload = {"msgtype": "markdown_v2", "markdown_v2": {"content": f"### {title}\n\n{content}"}}
+        r = requests.post(webhook, headers=headers, data=json.dumps(payload), timeout=10, proxies=PROXIES or None)
+        jr = {}
+        try:
+            jr = r.json()
+        except Exception:
+            pass
+        if r.status_code != 200 or (isinstance(jr, dict) and jr.get("errcode") not in (0, None)):
+            print(f"企业微信群消息推送失败：HTTP {r.status_code}, resp={jr}")
+        else:
+            print("企业微信群消息推送成功。")
+    except Exception as e:
+        print(f"企业微信群消息推送异常：{e}")
+
+
 # ===== 带重试请求 =====
 def do_request(method, url, session=None, **kwargs):
     last_exc = None
@@ -160,8 +185,10 @@ def main():
 
         if status == "success":
             send_dingtalk("T00ls 签到成功", f"**接口返回**：\n\n```\n{jr or raw}\n```")
+            send_wecom_webhook("T00ls 签到成功", f"**接口返回**：\n\n```\n{jr or raw}\n```")
         elif already_signed:
             send_dingtalk("T00ls 今日已签到", f"**接口返回**：\n\n```\n{jr or raw}\n```\n\n> 提示：接口提示已签过。")
+            send_wecom_webhook("T00ls 今日已签到", f"**接口返回**：\n\n```\n{jr or raw}\n```\n\n> 提示：接口提示已签过。")
         else:
             raise Exception(f"签到未成功：status={status}, message={message}")
 
