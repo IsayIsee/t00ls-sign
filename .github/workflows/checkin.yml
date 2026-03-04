@@ -28,4 +28,5 @@ jobs:
           T00LS_ANSWER: ${{ secrets.T00LS_ANSWER }}
           DD_ACCESS_TOKEN: ${{ secrets.DD_ACCESS_TOKEN }}
           DD_SECRET: ${{ secrets.DD_SECRET }}
+          WECOM_WEBHOOK_KEY: ${{ secrets.WECOM_WEBHOOK_KEY }}
         run: python toolsqiandao.py
