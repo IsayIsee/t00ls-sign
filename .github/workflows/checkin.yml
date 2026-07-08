@@ -2,15 +2,64 @@ name: T00ls 签到
 
 on:
   schedule:
-    # 每天 UTC 0:00 (北京时间 8:00)
-    - cron: '0 0 * * *'
+    - cron: '0 0 * * *'   # 每天 UTC 0:00 (北京时间 8:00)
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  checkin:
+  sync-upstream:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/HanZeYu-momo/Automatic-check-in-script-for-t00ls.git
+          git fetch upstream main
+
+      - name: Try merge upstream/main
+        id: merge
+        run: |
+          set +e
+          git merge upstream/main --no-edit
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Push if merge succeeded
+        if: steps.merge.outputs.status == '0'
+        run: git push origin main
+
+      - name: Abort merge on conflict
+        if: steps.merge.outputs.status != '0'
+        run: git merge --abort
+
+      - name: Notify webhook on conflict
+        if: steps.merge.outputs.status != '0'
+        run: |
+          curl -sS -X POST "${{ secrets.WECOM_WEBHOOK_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"msgtype\": \"text\",
+              \"text\": { \"content\": \"⚠️ T00ls 仓库自动合并冲突: upstream/main -> main\n仓库: ${{ github.repository }}\n请手动处理\" }
+            }"
+
+  checkin:
+    needs: sync-upstream
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -30,3 +79,18 @@ jobs:
           DD_SECRET: ${{ secrets.DD_SECRET }}
           WECOM_WEBHOOK_KEY: ${{ secrets.WECOM_WEBHOOK_KEY }}
         run: python toolsqiandao.py
+
+      - name: Update README run time
+        run: python update_readme.py
+
+      - name: Commit README if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet README.md; then
+            git add README.md
+            git commit -m "chore: update run time [skip ci]"
+            git push origin main
+          else
+            echo "README 无变化,跳过提交"
+          fi
