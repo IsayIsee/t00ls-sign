@@ -24,7 +24,7 @@ jobs:
 
       - name: Add upstream remote
         run: |
-          git remote add upstream https://github.com/HanZeYu-momo/Automatic-check-in-script-for-t00ls.git
+          git remote add upstream https://github.com/dingpotian/t00ls-sign.git
           git fetch upstream main
 
       - name: Try merge upstream/main
