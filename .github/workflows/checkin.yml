@@ -22,7 +22,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Add upstream remote
+      - name: Add upstream remote and fetch
         run: |
           git remote add upstream https://github.com/dingpotian/t00ls-sign.git
           git fetch upstream main
@@ -42,14 +42,15 @@ jobs:
         if: steps.merge.outputs.status != '0'
         run: git merge --abort
 
-      - name: Notify webhook on conflict
-        if: steps.merge.outputs.status != '0'
+      # 兜底:不管是 fetch 失败、merge 冲突、还是 push 失败,只要本 job 有任何一步失败,都通知
+      - name: Notify webhook on any failure
+        if: failure()
         run: |
           curl -sS -X POST "${{ secrets.WECOM_WEBHOOK_KEY }}" \
             -H "Content-Type: application/json" \
             -d "{
               \"msgtype\": \"text\",
-              \"text\": { \"content\": \"⚠️ T00ls 仓库自动合并冲突: upstream/main -> main\n仓库: ${{ github.repository }}\n请手动处理\" }
+              \"text\": { \"content\": \"⚠️ T00ls 仓库同步失败\n仓库: ${{ github.repository }}\n请查看 Actions 日志: https://github.com/${{ github.repository }}/actions\" }
             }"
 
   checkin:
