@@ -9,41 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  # 上游 (dingpotian/t00ls-sign) 重写过历史,与本仓库没有共同祖先,
-  # git merge 会直接报 "refusing to merge unrelated histories",故改为按文件同步。
-  # README 的"已稳定运行"一行由上游维护,本地不再生成。
-  sync-upstream:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure git identity
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Add upstream remote and fetch
-        run: |
-          git remote add upstream https://github.com/dingpotian/t00ls-sign.git
-          git fetch upstream main
-
-      - name: Sync README from upstream
-        run: |
-          git checkout upstream/main -- README.md
-          if git diff --cached --quiet; then
-            echo "README 与上游一致,无需提交"
-          else
-            git commit -m "chore: sync README from upstream [skip ci]"
-            git push origin main
-          fi
-
   checkin:
-    needs: sync-upstream
-    # 同步失败不应拖累签到
-    if: always()
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -70,9 +36,24 @@ jobs:
           WECOM_WEBHOOK_KEY: ${{ secrets.WECOM_WEBHOOK_KEY }}
         run: python toolsqiandao.py
 
-  # 兜底:同步或签到任一失败都通知
+      - name: Update README run time
+        run: python update_readme.py
+
+      - name: Commit README if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet README.md; then
+            git add README.md
+            git commit -m "chore: update run time [skip ci]"
+            git push origin main
+          else
+            echo "README 无变化,跳过提交"
+          fi
+
+  # 兜底:签到失败时通知
   notify:
-    needs: [sync-upstream, checkin]
+    needs: checkin
     if: failure()
     runs-on: ubuntu-latest
     steps:
@@ -92,5 +73,5 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{
               \"msgtype\": \"text\",
-              \"text\": { \"content\": \"⚠️ T00ls 任务失败\n仓库: ${{ github.repository }}\n请查看 Actions 日志: https://github.com/${{ github.repository }}/actions\" }
+              \"text\": { \"content\": \"⚠️ T00ls 签到失败\n仓库: ${{ github.repository }}\n请查看 Actions 日志: https://github.com/${{ github.repository }}/actions\" }
             }"
