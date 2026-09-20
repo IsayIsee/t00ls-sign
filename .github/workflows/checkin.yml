@@ -9,6 +9,9 @@ permissions:
   contents: write
 
 jobs:
+  # 上游 (dingpotian/t00ls-sign) 重写过历史,与本仓库没有共同祖先,
+  # git merge 会直接报 "refusing to merge unrelated histories",故改为按文件同步。
+  # README 的"已稳定运行"一行由上游维护,本地不再生成。
   sync-upstream:
     runs-on: ubuntu-latest
     steps:
@@ -27,34 +30,20 @@ jobs:
           git remote add upstream https://github.com/dingpotian/t00ls-sign.git
           git fetch upstream main
 
-      - name: Try merge upstream/main
-        id: merge
+      - name: Sync README from upstream
         run: |
-          set +e
-          git merge upstream/main --no-edit
-          echo "status=$?" >> "$GITHUB_OUTPUT"
-
-      - name: Push if merge succeeded
-        if: steps.merge.outputs.status == '0'
-        run: git push origin main
-
-      - name: Abort merge on conflict
-        if: steps.merge.outputs.status != '0'
-        run: git merge --abort
-
-      # 兜底:不管是 fetch 失败、merge 冲突、还是 push 失败,只要本 job 有任何一步失败,都通知
-      - name: Notify webhook on any failure
-        if: failure()
-        run: |
-          curl -sS -X POST "${{ secrets.WECOM_WEBHOOK_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"msgtype\": \"text\",
-              \"text\": { \"content\": \"⚠️ T00ls 仓库同步失败\n仓库: ${{ github.repository }}\n请查看 Actions 日志: https://github.com/${{ github.repository }}/actions\" }
-            }"
+          git checkout upstream/main -- README.md
+          if git diff --cached --quiet; then
+            echo "README 与上游一致,无需提交"
+          else
+            git commit -m "chore: sync README from upstream [skip ci]"
+            git push origin main
+          fi
 
   checkin:
     needs: sync-upstream
+    # 同步失败不应拖累签到
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -81,17 +70,27 @@ jobs:
           WECOM_WEBHOOK_KEY: ${{ secrets.WECOM_WEBHOOK_KEY }}
         run: python toolsqiandao.py
 
-      - name: Update README run time
-        run: python update_readme.py
-
-      - name: Commit README if changed
+  # 兜底:同步或签到任一失败都通知
+  notify:
+    needs: [sync-upstream, checkin]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send webhook notification
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if ! git diff --quiet README.md; then
-            git add README.md
-            git commit -m "chore: update run time [skip ci]"
-            git push origin main
-          else
-            echo "README 无变化,跳过提交"
+          WEBHOOK="${{ secrets.WECOM_WEBHOOK_KEY }}"
+          if [ -z "$WEBHOOK" ]; then
+            echo "未配置 WECOM_WEBHOOK_KEY,跳过通知"
+            exit 0
           fi
+          # secret 存 key 时自动拼接完整地址,存完整 URL 时直接使用
+          case "$WEBHOOK" in
+            http*) URL="$WEBHOOK" ;;
+            *)     URL="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=$WEBHOOK" ;;
+          esac
+          curl -sS -X POST "$URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"msgtype\": \"text\",
+              \"text\": { \"content\": \"⚠️ T00ls 任务失败\n仓库: ${{ github.repository }}\n请查看 Actions 日志: https://github.com/${{ github.repository }}/actions\" }
+            }"
