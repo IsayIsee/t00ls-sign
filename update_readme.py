@@ -2,7 +2,6 @@ import re
 from datetime import date, datetime
 
 README_PATH = "README.md"
-PATTERN = re.compile(r"已稳定运行：(\d{4}-\d{2}-\d{2}) ~ \d{4}-\d{2}-\d{2}（\d+ *天）。")
 
 def main():
     with open(README_PATH, "r", encoding="utf-8") as f:
